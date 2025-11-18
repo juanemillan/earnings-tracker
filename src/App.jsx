@@ -154,6 +154,7 @@ const EarningsTracker = () => {
   // Parse CSV content
   const parseCSV = (csvText) => {
     const lines = csvText.trim().split('\n');
+    if (lines.length === 0) return [];
     const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
     const newEntries = [];
     for (let i = 1; i < lines.length; i++) {
@@ -175,10 +176,16 @@ const EarningsTracker = () => {
       if (values.length >= headers.length && values.some(v => v)) {
         const entry = {};
         headers.forEach((header, index) => {
-          entry[header] = values[index] || null;
+          entry[header] = values[index] ?? null;
         });
+
+        const hasUsefulData = entry.workDate || entry.itemID || entry.duration || entry.payout;
+
+        const payoutVal = parsePayoutAmount(entry.payout);
+        const isNegativePayout = Number.isFinite(payoutVal) && payoutVal < 0;
+
         // Only add entries with valid data
-        if (entry.workDate || entry.itemID || entry.duration || entry.payout) {
+        if (hasUsefulData && !isNegativePayout) {
           newEntries.push(entry);
         }
       }
@@ -355,13 +362,15 @@ const EarningsTracker = () => {
     );
   }, [filteredWeeklyForTrends]);
 
+  const totalEarningsInRange = totalsInRange.earnings;
+  
   const avgRateInRange = totalsInRange.hours > 0
-    ? (totalsInRange.earnings / totalsInRange.hours)
-    : 0;
-
+  ? (totalsInRange.earnings / totalsInRange.hours)
+  : 0;
+  
   const earningsGoalPreview = timeGoalHours * avgRateInRange;
   const earningsGoal = earningsGoalPreview; // mismo valor, nombre corto si lo usas
-
+  
   // 4) Total stats globales (opcionales)
   const totalStats = React.useMemo(() => {
     const weeks = weeklyStats.length || 1;
@@ -375,7 +384,9 @@ const EarningsTracker = () => {
       avgWeeklyEarnings: totalEarnings / weeks,
     };
   }, [weeklyStats, entries.length]);
-
+  
+  const totalEarningsAllTime = totalStats.totalEarnings;
+  
   // 5) Handlers (tal cual)
   const onChangeRange = setTimeRange;        // (r) => setTimeRange(r)
   const onChangeChart = setActiveChart;      // (k) => setActiveChart(k)
@@ -608,7 +619,7 @@ const EarningsTracker = () => {
             contentStyle={{ borderRadius: 12, boxShadow: 'none' }}
             labelStyle={{ color: '#0F172A', fontWeight: 600 }}
             formatter={(value, name) => {
-              const isHours = name.includes('Hours') || (name.includes('Target') && !name.includes('Earnings'));
+              const isHours = name.includes('hours') || (name.includes('target') && !name.includes('earnings'));
               return isHours ? [`${fmtH2(value)}h`, name] : [`$${Number(value).toFixed(2)}`, name];
             }}
           />
@@ -780,6 +791,8 @@ const EarningsTracker = () => {
         weeklyAvgEarnings={weeklyAvgEarnings}
         avgRate={avgRate}
         goalHoursPerWeek={timeGoalHours}
+        totalEarningsRange={totalEarningsInRange}
+        totalEarningsAllTime={totalEarningsAllTime}  
       />
 
       {/* Charts Section */}

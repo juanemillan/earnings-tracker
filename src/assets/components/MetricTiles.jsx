@@ -17,6 +17,8 @@ export function MetricTiles({
   ytdEarnings = 0,
   goalHoursPerWeek = 30,
   avgRate = 0,
+  totalEarningsRange = 0,
+  totalEarningsAllTime = 0,
 }) {
   const earningsTargetWeekly = goalHoursPerWeek * avgRate;
 
@@ -53,6 +55,22 @@ export function MetricTiles({
       tone: 'from-violet-50 to-fuchsia-50',
       border: 'border-violet-200',
     },
+    {
+      key: 'totalEarningsRange',
+      label: `Total Earnings (${timeRangeLabel})`,
+      value: `$${fmt$(totalEarningsRange)}`,
+      icon: <DollarSign size={18} className="text-sky-600" />,
+      tone: 'from-sky-50 to-cyan-50',
+      border: 'border-sky-200',
+    },
+    {
+      key: 'totalEarningsAllTime',
+      label: 'Total Earnings (All time)',
+      value: `$${fmt$(totalEarningsAllTime)}`,
+      icon: <DollarSign size={18} className="text-slate-600" />,
+      tone: 'from-slate-50 to-slate-100',
+      border: 'border-slate-200',
+    },
   ];
 
   return (
@@ -62,7 +80,7 @@ export function MetricTiles({
         Summary — <span className="text-slate-800">{timeRangeLabel}</span>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-6 gap-3">
         {items.map((m) => (
           <div
             key={m.key}
