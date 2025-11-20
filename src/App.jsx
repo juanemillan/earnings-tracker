@@ -773,7 +773,7 @@ const EarningsTracker = () => {
       <HeaderHero
         title="Outlier Earnings Tracker"
         subtitle="Track your weekly earnings with automatic CSV import, duplicate detection, and flexible goals."
-        githubUrl="https://github.com/tu-usuario/tu-repo"
+        githubUrl="https://github.com/juanemillan/earnings-tracker"
         author="Juane (pilots-coder624)"
       />
 
