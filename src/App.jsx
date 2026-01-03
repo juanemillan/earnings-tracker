@@ -153,16 +153,55 @@ const EarningsTracker = () => {
 
   // Parse CSV content
   const parseCSV = (csvText) => {
-    const lines = csvText.trim().split('\n');
+    if (!csvText) return [];
+    const lines = csvText
+      .trim()
+      .split('\n')
+      .map(l => l.replace(/\r/g, ''))
+      .filter(l => l.trim() !== '');
     if (lines.length === 0) return [];
-    const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
+
+    // Read headers and build a normalized header->canonical key map
+    const rawHeaders = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
+    const normalize = (s) => (s || '').toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
+    const nameMap = {
+      workdate: 'workDate',
+      date: 'workDate',
+
+      itemid: 'itemID',
+      id: 'itemID',
+
+      projectname: 'projectName',
+      project: 'projectName',
+
+      duration: 'duration',
+      time: 'duration',
+
+      rate: 'rateApplied',
+      rateapplied: 'rateApplied',
+
+      payout: 'payout',
+      payable: 'payout',
+      amount: 'payout',
+
+      paytype: 'payType',
+      type: 'payType',
+
+      status: 'status',
+    };
+
+    const headerMap = rawHeaders.map(h => nameMap[normalize(h)] || h);
+
     const newEntries = [];
+
+    // Parse each CSV row (basic CSV parsing that respects quoted fields)
     for (let i = 1; i < lines.length; i++) {
+      const line = lines[i];
       const values = [];
       let current = '';
       let inQuotes = false;
-      for (let j = 0; j < lines[i].length; j++) {
-        const char = lines[i][j];
+      for (let j = 0; j < line.length; j++) {
+        const char = line[j];
         if (char === '"') {
           inQuotes = !inQuotes;
         } else if (char === ',' && !inQuotes) {
@@ -173,18 +212,20 @@ const EarningsTracker = () => {
         }
       }
       values.push(current.trim());
-      if (values.length >= headers.length && values.some(v => v)) {
+
+      if (values.length >= 1 && values.some(v => v)) {
         const entry = {};
-        headers.forEach((header, index) => {
-          entry[header] = values[index] ?? null;
+        headerMap.forEach((mappedKey, idx) => {
+          // Use canonical key if known, otherwise keep original header name
+          entry[mappedKey] = values[idx] ?? null;
         });
 
-        const hasUsefulData = entry.workDate || entry.itemID || entry.duration || entry.payout;
+        // Ensure commonly used canonical keys exist for downstream code
+        const hasUsefulData = entry.workDate || entry.itemID || entry.duration || entry.payout || entry['Work Date'];
 
         const payoutVal = parsePayoutAmount(entry.payout);
         const isNegativePayout = Number.isFinite(payoutVal) && payoutVal < 0;
 
-        // Only add entries with valid data
         if (hasUsefulData && !isNegativePayout) {
           newEntries.push(entry);
         }
