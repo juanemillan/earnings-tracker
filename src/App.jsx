@@ -1593,17 +1593,19 @@ const EarningsTracker = () => {
       {viewMode === 'new' && (
         <div className="flex-1 flex overflow-hidden">
           {/* Sidebar */}
-          <Sidebar 
-            isCollapsed={sidebarCollapsed}
-            onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
-            activeSection={activeSection}
-            onSectionChange={setActiveSection}
-            onExport={exportData}
-            onFilesSelected={processCsvFiles}
-            uploadStatus={uploadStatus}
-            viewMode={viewMode}
-            hasData={hasData}
-          />
+          {hasData && (
+            <Sidebar 
+              isCollapsed={sidebarCollapsed}
+              onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+              activeSection={activeSection}
+              onSectionChange={setActiveSection}
+              onExport={exportData}
+              onFilesSelected={processCsvFiles}
+              uploadStatus={uploadStatus}
+              viewMode={viewMode}
+              hasData={hasData}
+            />
+          )}
           
           {/* Main Content Area */}
           <div className="flex flex-1 flex-col overflow-hidden p-6 animate-fade-in justify-center bg-gradient-to-tr from-indigo-50 via-violet-50 to-cyan-50">
