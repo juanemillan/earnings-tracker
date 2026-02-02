@@ -1,6 +1,7 @@
 // src/components/MetricTiles.jsx
 import React from 'react';
 import { DollarSign, Clock, TrendingUp, Target } from 'lucide-react';
+import clsx from 'clsx';
 
 // Small helpers (optionally reuse your fmtH2)
 const fmt$ = (n) => (n ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -19,6 +20,8 @@ export function MetricTiles({
   avgRate = 0,
   totalEarningsRange = 0,
   totalEarningsAllTime = 0,
+  showTotalEarnings = true, // Show total earnings by default
+  viewMode = 'original' // 'new' or 'classic'
 }) {
   const earningsTargetWeekly = goalHoursPerWeek * avgRate;
 
@@ -73,6 +76,9 @@ export function MetricTiles({
     },
   ];
 
+  // Filter out totalEarningsAllTime if showTotalEarnings is false
+  const filteredItems = showTotalEarnings ? items : items.filter(item => item.key !== 'totalEarningsAllTime');
+
   return (
     <section className="mb-6">
       {/* header chip */}
@@ -80,8 +86,8 @@ export function MetricTiles({
         Summary — <span className="text-slate-800">{timeRangeLabel}</span>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-6 gap-3">
-        {items.map((m) => (
+      <div className={clsx("grid grid-cols-2 sm:grid-cols-2 gap-3", viewMode === 'new' ? 'lg:grid-cols-5' : 'lg:grid-cols-6')}>
+        {filteredItems.map((m) => (
           <div
             key={m.key}
             className={`relative overflow-hidden rounded-xl border ${m.border} bg-white shadow-lg`}

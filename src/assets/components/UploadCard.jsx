@@ -2,10 +2,17 @@
 import React, { useRef } from 'react';
 import { Upload, Download, Plus } from 'lucide-react';
 
-export function UploadCard({ onExport, onFilesSelected, status }) {
+export function UploadCard({ onExport, onFilesSelected, status, hasData, viewMode, isCollapsed }) {
   const fileInputRef = useRef(null);
 
-  const onChange = (e) => onFilesSelected?.(e.target.files);
+  const onChange = (e) => {
+    console.log('📂 File input onChange triggered');
+    onFilesSelected?.(e.target.files);
+    // Reset input to allow selecting the same file again
+    if (e.target) {
+      e.target.value = '';
+    }
+  };
   const onDragOver = (e) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'copy';
@@ -15,24 +22,144 @@ export function UploadCard({ onExport, onFilesSelected, status }) {
     onFilesSelected?.(e.dataTransfer.files);
   };
 
+  // Compact mode when data is loaded
+  if (hasData) {
+    // New UI - minimal style for sidebar
+    if (viewMode === 'new') {
+      return (
+        <section className="h-full flex flex-col">
+          <div className={`${isCollapsed ? 'p-2' : 'p-3'} flex-1 flex flex-col justify-between`}>
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={onExport}
+                className={`w-full inline-flex items-center ${isCollapsed ? 'justify-center' : 'gap-2'} rounded-lg bg-emerald-600 ${isCollapsed ? 'p-3' : 'px-4 py-3'} text-sm font-medium text-white hover:bg-emerald-700 active:scale-[.99] transition-all`}
+                title={isCollapsed ? 'Export Weekly Report' : ''}
+              >
+                <Download size={20} className="flex-shrink-0" />
+                {!isCollapsed && <span className="truncate">Export Weekly Report</span>}
+              </button>
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv"
+                onChange={onChange}
+                className="hidden"
+                id="csv-upload-sidebar"
+              />
+              <label 
+                htmlFor="csv-upload-sidebar" 
+                className={`w-full cursor-pointer inline-flex items-center ${isCollapsed ? 'justify-center' : 'gap-2'} rounded-lg border-2 border-dashed border-indigo-300 bg-indigo-50/50 ${isCollapsed ? 'p-3' : 'px-4 py-3'} text-sm font-medium text-indigo-700 hover:bg-indigo-100 hover:border-indigo-400 transition-all`}
+                title={isCollapsed ? 'Load More CSV Data' : ''}
+              >
+                <Plus size={20} className="flex-shrink-0" />
+                {!isCollapsed && <span className="truncate">Load More CSV Data</span>}
+              </label>
+            </div>
+
+            {/* Status */}
+            {status && (
+              <div className="mt-4 w-full">
+                <div
+                  className={`w-full flex items-center ${isCollapsed ? 'justify-center p-2' : 'gap-2 px-3 py-2'} rounded-lg border text-sm transition-all ${
+                    status.startsWith('✅')
+                      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                      : status.startsWith('❌')
+                      ? 'border-rose-200 bg-rose-50 text-rose-700'
+                      : 'border-indigo-200 bg-indigo-50 text-indigo-700'
+                  }`}
+                  title={isCollapsed ? status : ''}
+                >
+                  <span className={`flex-shrink-0 ${isCollapsed ? 'text-lg' : ''}`}>
+                    {status.split(' ')[0]}
+                  </span>
+                  {!isCollapsed && <span className="truncate">{status.slice(status.indexOf(' ') + 1)}</span>}
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+      );
+    }
+
+    // Original UI - full style with border and gradient
+    return (
+      <section className="relative rounded-2xl border border-slate-200 bg-white shadow-lg h-full flex flex-col">
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-3 bg-gradient-to-r from-indigo-500 via-violet-500 to-cyan-400 rounded-t-2xl" />
+
+        <div className="p-6 sm:p-7 flex-1 flex flex-col justify-between">
+          <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+
+            <button
+              onClick={onExport}
+              className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-3 text-sm font-medium text-white hover:bg-emerald-700 active:scale-[.99]"
+            >
+              <Download size={16} />
+              Export Weekly Report
+            </button>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv"
+              onChange={onChange}
+              className="hidden"
+              id="csv-upload"
+            />
+            <label 
+              htmlFor="csv-upload" 
+              className="cursor-pointer inline-flex items-center justify-center gap-2 rounded-lg border-2 border-dashed border-indigo-300 bg-indigo-50/50 px-4 py-3 text-sm font-medium text-indigo-700 hover:bg-indigo-100 hover:border-indigo-400 transition-colors"
+            >
+              <Plus size={20} />
+              Load More CSV Data
+            </label>
+
+          </div>
+
+          {/* Compact upload button */}
+          <div className="mt-auto pt-6">
+            {/* Status */}
+            {status && (
+              <div className="mt-0">
+                <div
+                  className={`flex items-start gap-2 rounded-lg border px-3 py-2 text-sm ${
+                    status.startsWith('✅')
+                      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                      : status.startsWith('❌')
+                      ? 'border-rose-200 bg-rose-50 text-rose-700'
+                      : 'border-indigo-200 bg-indigo-50 text-indigo-700'
+                  }`}
+                >
+                  <span className="mt-0.5 select-none">•</span>
+                  <p className="leading-5">{status}</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  // Full dropzone mode when no data
   return (
-    <section className="relative mb-6 rounded-2xl border border-slate-200 bg-white shadow-lg">
+    <section className="relative rounded-2xl border border-slate-200 bg-white shadow-lg h-full flex flex-col">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-3 bg-gradient-to-r from-indigo-500 via-violet-500 to-cyan-400 rounded-t-2xl" />
 
-      <div className="p-6 sm:p-7">
+      <div className="p-6 sm:p-7 flex-1 flex flex-col justify-between">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-lg sm:text-xl font-semibold text-slate-900 flex items-center gap-2">
             <Upload className="text-indigo-600" size={20} />
             Upload New Data
           </h2>
 
-          <button
+          {/* <button
             onClick={onExport}
             className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 active:scale-[.99]"
           >
             <Download size={16} />
             Export Weekly Report
-          </button>
+          </button> */}
         </div>
 
         {/* Dropzone */}

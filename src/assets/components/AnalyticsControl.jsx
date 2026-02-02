@@ -85,7 +85,7 @@ export function AnalyticsControls({
             </div>
 
             {/* Goal control */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 border border-slate-200 bg-slate-50 rounded-lg px-3 py-2">
               <label className="text-xs text-slate-600">Goal (h)</label>
               <input
                 type="number"

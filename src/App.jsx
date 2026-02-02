@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef } from 'react';
-import { Upload, Calendar, DollarSign, Clock, TrendingUp, FileText, Plus, Download, BarChart3, Activity, Sparkles } from 'lucide-react';
+import { Upload, Calendar, DollarSign, Clock, TrendingUp, FileText, Plus, Download, BarChart3, Activity, Sparkles, Loader2 } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { HeaderHero } from '/src/assets/components/HeaderHero.jsx';
 import { UploadCard } from '/src/assets/components/UploadCard.jsx';
@@ -7,8 +7,39 @@ import { MetricTiles } from '/src/assets/components/MetricTiles.jsx';
 import { AnalyticsControls } from '/src/assets/components/AnalyticsControl.jsx';
 import ChartCard from '/src/assets/components/ChartCard';
 import SectionCard from '/src/assets/components/SectionCard.jsx';
+import Header from '/src/assets/components/Header.jsx';
+import Sidebar from '/src/assets/components/Sidebar.jsx';
+import TwoColumnLayout from '/src/assets/components/TwoColumnLayout.jsx';
+import { CycleTracker } from '/src/assets/components/CycleTracker.jsx';
+import { BreakdownTable } from '/src/assets/components/BreakdownTable.jsx';
+import { GlobalOverview } from '/src/assets/components/GlobalOverview.jsx';
+import { CurrentWeekProgress } from '/src/assets/components/CurrentWeekProgress.jsx';
+import WeeklyHeatmap from '/src/assets/components/WeeklyHeatmap.jsx';
+import QuickInsights from '/src/assets/components/QuickInsights.jsx';
+import { EmptyState } from '/src/assets/components/EmptyState.jsx';
+
+// Loading Overlay Component
+const LoadingOverlay = () => (
+  <div className="fixed inset-0 z-[60] flex items-center justify-center bg-white/40 backdrop-blur-md">
+    <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-sm mx-4 border border-slate-200 animate-fade-in">
+      <div className="flex flex-col items-center gap-4">
+        <div className="relative">
+          <Loader2 className="w-12 h-12 text-indigo-600 animate-spin" />
+          <Sparkles className="w-6 h-6 text-indigo-400 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 animate-pulse" />
+        </div>
+        <div className="text-center">
+          <h3 className="text-lg font-semibold text-slate-900 mb-1">Processing Data</h3>
+          <p className="text-sm text-slate-600">Analyzing your earnings...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+);
 
 const EarningsTracker = () => {
+  // Detect user's timezone
+  const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  
   const [entries, setEntries] = useState([]);
   const [weeklyStats, setWeeklyStats] = useState([]);
   const [uploadStatus, setUploadStatus] = useState('');
@@ -19,12 +50,20 @@ const EarningsTracker = () => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10); // default 10
   const [cyclePage, setCyclePage] = useState(1);
+  const [viewMode, setViewMode] = useState('original'); // Toggle between 'original' and 'new'
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [activeSection, setActiveSection] = useState('upload'); // Active section in new UI
+  const [showLoading, setShowLoading] = useState(false); // Loading overlay state
+  const [dataLoaded, setDataLoaded] = useState(false); // Track if data has been loaded (for mobile initial screen)
+  const [isProcessing, setIsProcessing] = useState(false); // Prevent double processing
   const fileInputRef = useRef(null);
   
-  const weeks = weeklyStats.length || 1;
-  const weeklyAvgHours   = weeklyStats.reduce((a,w)=>a+w.totalHours,0) / weeks;
-  const weeklyAvgEarnings= weeklyStats.reduce((a,w)=>a+w.totalEarnings,0) / weeks;
-  const avgRate = (weeklyAvgHours > 0) ? (weeklyAvgEarnings / weeklyAvgHours) : 0;
+  // Force original view on mobile
+  React.useEffect(() => {
+    if (isMobile()) {
+      setViewMode('original');
+    }
+  }, []);
 
   // label for header chips: "All time" or the actual range
   const timeRangeLabel = timeRange === 'ALL' ? 'All time' : timeRange;
@@ -74,10 +113,19 @@ const EarningsTracker = () => {
     return Number.isInteger(v) ? String(v) : String(v);
   };
 
-  // Helper function to parse date
+  // Helper function to parse date in user's timezone
   const parseDate = (dateStr) => {
     if (!dateStr) return null;
-    return new Date(dateStr);
+    // Parse the date string and ensure it's interpreted in user's timezone
+    const date = new Date(dateStr);
+    // If the date string doesn't include time, it's parsed as UTC midnight
+    // We need to adjust it to the user's timezone
+    if (dateStr.indexOf('T') === -1 && dateStr.indexOf(' ') === -1) {
+      // Date-only string (e.g., "2024-01-15"), adjust to local timezone
+      const offset = date.getTimezoneOffset();
+      date.setMinutes(date.getMinutes() + offset);
+    }
+    return date;
   };
 
   // Helper to get since date based on selected range
@@ -235,6 +283,16 @@ const EarningsTracker = () => {
   };
 
   const processCsvFiles = (files) => {
+    const processId = Math.random().toString(36).substring(7);
+    console.log(`🔄 [${processId}] processCsvFiles called with:`, files?.length, 'files');
+    console.log(`🔒 [${processId}] isProcessing state:`, isProcessing);
+    
+    // Prevent double processing
+    if (isProcessing) {
+      console.warn(`⏸️ [${processId}] Already processing, ignoring...`);
+      return;
+    }
+    
     try {
       const file = files?.[0];
       if (!file) {
@@ -242,9 +300,16 @@ const EarningsTracker = () => {
         return;
       }
 
+      console.log(`📁 [${processId}] Processing file:`, file.name, file.size, 'bytes');
+
+      // Mark as processing and show loading overlay
+      setIsProcessing(true);
+      setShowLoading(true);
+
       const reader = new FileReader();
 
       reader.onload = (e) => {
+        console.log(`📖 [${processId}] File loaded, starting parse...`);
         try {
           // 1) Normaliza BOM/saltos
           let csvText = e.target.result || '';
@@ -253,46 +318,81 @@ const EarningsTracker = () => {
 
           // 2) Parse
           const parsedEntries = parseCSV(csvText);
+          console.log(`📊 [${processId}] CSV Parsed:`, parsedEntries.length, 'entries');
+          
+          // Calculate total earnings from CSV for debugging
+          const csvTotalEarnings = parsedEntries.reduce((sum, entry) => {
+            return sum + parsePayoutAmount(entry.payout);
+          }, 0);
+          console.log(`💰 [${processId}] Total Earnings in CSV:`, csvTotalEarnings.toFixed(2));
 
-          // 3) Calcula uniqueNew CONTRA el snapshot actual (sin closures obsoletos)
-          let mergedRef = null;
-          setEntries((prev) => {
-            const existingKeys = new Set(prev.map(en => `${en.itemID}-${en.workDate}`));
-            const uniqueNew = parsedEntries.filter(en => {
-              const key = `${en.itemID}-${en.workDate}`;
-              return !existingKeys.has(key) && (en.itemID || en.workDate);
-            });
-            mergedRef = [...prev, ...uniqueNew];     // <- guardamos para usar afuera
-            // status aquí es seguro (solo string)
-            setUploadStatus(`✅ Added ${uniqueNew.length} new entries (${parsedEntries.length - uniqueNew.length} duplicates skipped)`);
-            return mergedRef;
+          // 3) Load all entries (no duplicate checking - each row is unique)
+          console.log(`📋 [${processId}] Loading all entries from CSV...`);
+          
+          // Filter to only entries with positive payable amounts
+          const validEntries = parsedEntries.filter(en => {
+            const amount = parsePayoutAmount(en.payout);
+            return amount > 0; // Only positive amounts
           });
-
-          // 4) Actualiza weeklyStats FUERA del updater (evita sets anidados)
-          //   Esperamos al siguiente tick para garantizar que mergedRef esté listo
+          
+          console.log(`✅ [${processId}] Loaded entries:`, validEntries.length);
+          console.log(`🗑️ [${processId}] Filtered out:`, parsedEntries.length - validEntries.length, 'entries (negative/zero amounts)');
+          
+          // Calculate total earnings
+          const totalEarnings = validEntries.reduce((sum, entry) => {
+            return sum + parsePayoutAmount(entry.payout);
+          }, 0);
+          console.log(`💰 [${processId}] Total Earnings loaded:`, totalEarnings.toFixed(2));
+          
+          setUploadStatus(`✅ Loaded ${validEntries.length} entries`);
+          setEntries(validEntries);
+          
+          // 4) Update weeklyStats immediately
           setTimeout(() => {
             try {
-              if (mergedRef) setWeeklyStats(calculateWeeklyStats(mergedRef));
+              const calculatedStats = calculateWeeklyStats(validEntries);
+              setWeeklyStats(calculatedStats);
+              
+              // Set default time range if first load
+              if (!dataLoaded && validEntries.length > 0) {
+                setTimeRange(pickDefaultRange(validEntries));
+                setDataLoaded(true);
+              }
+              
+              // Hide loading after minimum 1.5 seconds
+              setTimeout(() => {
+                setShowLoading(false);
+                setIsProcessing(false);
+                console.log(`✨ [${processId}] Processing complete!`);
+              }, 1500);
             } catch (err) {
-              console.error('calculateWeeklyStats error:', err);
+              console.error(`❌ [${processId}] calculateWeeklyStats error:`, err);
               setUploadStatus(`❌ Stats error: ${err.message}`);
+              setShowLoading(false);
+              setIsProcessing(false);
             }
           }, 0);
 
         } catch (err) {
-          console.error('processCsvFiles parse error:', err);
+          console.error(`❌ [${processId}] processCsvFiles parse error:`, err);
           setUploadStatus(`❌ Error parsing CSV: ${err.message}`);
+          setShowLoading(false);
+          setIsProcessing(false);
         }
       };
 
       reader.onerror = () => {
+        console.error(`❌ [${processId}] Error reading file`);
         setUploadStatus('❌ Error reading file');
+        setShowLoading(false);
+        setIsProcessing(false);
       };
 
       reader.readAsText(file, 'utf-8');
     } catch (err) {
-      console.error('processCsvFiles fatal:', err);
+      console.error(`❌ [${processId}] processCsvFiles fatal:`, err);
       setUploadStatus(`❌ Unexpected error: ${err.message}`);
+      setIsProcessing(false);
     }
   };
 
@@ -322,6 +422,9 @@ const EarningsTracker = () => {
 
   // Export data as CSV
   const exportData = () => {
+    console.log('📤 Export button clicked');
+    console.log('📊 Weekly stats available:', weeklyStats.length);
+    
     if (weeklyStats.length === 0) {
       setUploadStatus('❌ No data to export. Please upload some earnings data first.');
       return;
@@ -427,6 +530,43 @@ const EarningsTracker = () => {
   }, [weeklyStats, entries.length]);
   
   const totalEarningsAllTime = totalStats.totalEarnings;
+  
+  // Calculate averages for the filtered range
+  const weeks = filteredWeeklyForTrends.length || 1;
+  const weeklyAvgHours = filteredWeeklyForTrends.reduce((a,w)=>a+w.totalHours,0) / weeks;
+  const weeklyAvgEarnings = filteredWeeklyForTrends.reduce((a,w)=>a+w.totalEarnings,0) / weeks;
+  const avgRate = (weeklyAvgHours > 0) ? (weeklyAvgEarnings / weeklyAvgHours) : 0;
+  
+  // Calculate current week stats
+  const currentWeekStats = React.useMemo(() => {
+    // Get current date/time in user's timezone
+    const now = new Date();
+    const today = new Date(now.toLocaleString('en-US', { timeZone: userTimeZone }));
+    today.setHours(0, 0, 0, 0); // Reset time to start of day for accurate comparison
+    const currentWeek = weeklyStats.find(week => 
+      week.weekStart <= today && week.weekEnd >= today
+    );
+    
+    if (!currentWeek) {
+      return {
+        hours: 0,
+        earnings: 0,
+        start: null,
+        end: null,
+        daysRemaining: 0
+      };
+    }
+    
+    const daysRemaining = Math.max(0, Math.ceil((currentWeek.weekEnd - today) / (1000 * 60 * 60 * 24)));
+    
+    return {
+      hours: currentWeek.totalHours,
+      earnings: currentWeek.totalEarnings,
+      start: currentWeek.weekStart,
+      end: currentWeek.weekEnd,
+      daysRemaining
+    };
+  }, [weeklyStats]);
   
   // 5) Handlers (tal cual)
   const onChangeRange = setTimeRange;        // (r) => setTimeRange(r)
@@ -807,25 +947,62 @@ const EarningsTracker = () => {
 
   const RANGE_OPTIONS = ['1m', '3m', '6m', '1Y', 'ALL'];
 
+  // Check if we have data to show content
+  const hasData = entries.length > 0 && weeklyStats.length > 0;
+
   return (
-    <div className="max-w-7xl mx-auto p-6 bg-slate-50 min-h-screen">
+    <div className={`bg-slate-50 ${
+      viewMode === 'new' 
+        ? 'h-screen overflow-hidden flex flex-col' 
+        : 'min-h-screen'
+    }`}>
     
-      {/* Header / Hero Section */}
-      <HeaderHero
-        title="Outlier Earnings Tracker"
-        subtitle="Track your weekly earnings with automatic CSV import, duplicate detection, and flexible goals."
+      {/* Loading Overlay */}
+      {showLoading && <LoadingOverlay />}
+      
+      {/* Glassmorphic Header with Toggle */}
+      <Header 
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
         githubUrl="https://github.com/juanemillan/earnings-tracker"
-        author="Juane (pilots-coder624)"
       />
 
-      {/* Upload Section */}
-      <UploadCard
-        onExport={exportData}
-        onFilesSelected={processCsvFiles}
-        status={uploadStatus}
-      />
+      {/* Original View */}
+      {viewMode === 'original' && (
+        <div className="max-w-7xl mx-auto p-4 sm:p-6">
 
+      <div className='grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-4 sm:gap-6 items-stretch mb-6 sm:mb-8'>
+        {/* Header / Hero Section */}
+        <div className="h-full min-w-0 animate-fade-in">
+        <HeaderHero
+          title="Outlier Earnings Tracker"
+          subtitle="Track your weekly earnings with automatic CSV import, duplicate detection, and flexible goals."
+          githubUrl="https://github.com/juanemillan/earnings-tracker"
+          author="Juane (pilots-coder624)"
+          viewMode={viewMode}
+          hasData={hasData}
+          timeGoalHours={timeGoalHours}
+          onChangeTimeGoal={onChangeTimeGoal}
+          avgRate={avgRateInRange}
+        />
+        </div>
+
+        {/* Upload Section */}
+        <div id="upload" className="h-full min-w-0 animate-fade-in animate-delay-100">
+        <UploadCard
+          onExport={exportData}
+          onFilesSelected={processCsvFiles}
+          status={uploadStatus}
+          hasData={hasData}
+        />
+        </div>
+      </div>
+
+      {/* Show content only when data is loaded */}
+      {hasData ? (
+        <>
       {/* Summary Stats */}
+      <div id="metrics" className="animate-fade-in animate-delay-200">
       <MetricTiles
         timeRangeLabel={timeRangeLabel}
         weeklyAvgHours={weeklyAvgHours}
@@ -833,11 +1010,13 @@ const EarningsTracker = () => {
         avgRate={avgRate}
         goalHoursPerWeek={timeGoalHours}
         totalEarningsRange={totalEarningsInRange}
-        totalEarningsAllTime={totalEarningsAllTime}  
+        totalEarningsAllTime={totalEarningsAllTime}
+        viewMode={viewMode}
       />
+      </div>
 
       {/* Charts Section */}
-      <div className="bg-white rounded-2xl shadow-md mb-6">
+      <div id="charts" className="bg-white rounded-2xl shadow-md mb-6 animate-fade-in animate-delay-300">
 
         <AnalyticsControls
           timeRange={timeRange}
@@ -878,6 +1057,7 @@ const EarningsTracker = () => {
       </div>
 
       {/* 4-Week Cycle Tracker */}
+      <div id="cycles" className="animate-fade-in animate-delay-400">
       <SectionCard
         className="mb-6 rounded-b-2xl shadow-lg"
         title="4-Week Cycle Progress"
@@ -1068,11 +1248,12 @@ const EarningsTracker = () => {
           </div>
         )}
       </SectionCard>
+      </div>
 
 
 
       {/* Weekly/Daily Breakdown Section */}
-      <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
+      <div id="breakdown" className="bg-white rounded-2xl shadow-lg overflow-hidden animate-fade-in animate-delay-400">
         <SectionCard
           title="Detailed Breakdown"
           subtitle={activeBreakdown === 'weekly' ? 'Weekly totals (current range)' : 'Daily totals (current range)'}
@@ -1390,6 +1571,197 @@ const EarningsTracker = () => {
           </div>
         )}
       </div>
+      </>
+      ) : (
+        // No data loaded yet - show empty state
+        <div className="max-w-2xl mx-auto mt-12 text-center px-4">
+          <div className="rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50/50 p-12">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-indigo-100 mb-4">
+              <Upload className="text-indigo-600" size={32} />
+            </div>
+            <h3 className="text-xl font-semibold text-slate-900 mb-2">No Data Yet</h3>
+            <p className="text-slate-600 mb-6">
+              Upload a CSV file from your Outlier Earnings tab to get started with tracking your earnings and analytics.
+            </p>
+          </div>
+        </div>
+      )}
+      </div>
+      )}
+
+      {/* New UI View */}
+      {viewMode === 'new' && (
+        <div className="flex-1 flex overflow-hidden">
+          {/* Sidebar */}
+          <Sidebar 
+            isCollapsed={sidebarCollapsed}
+            onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+            activeSection={activeSection}
+            onSectionChange={setActiveSection}
+            onExport={exportData}
+            onFilesSelected={processCsvFiles}
+            uploadStatus={uploadStatus}
+            viewMode={viewMode}
+            hasData={hasData}
+          />
+          
+          {/* Main Content Area */}
+          <div className="flex flex-1 flex-col overflow-hidden p-6 animate-fade-in justify-center bg-gradient-to-tr from-indigo-50 via-violet-50 to-cyan-50">
+            
+            {!hasData && (
+              <EmptyState
+                onFilesSelected={processCsvFiles}
+                uploadStatus={uploadStatus}
+                githubUrl="https://github.com/juanemillan/earnings-tracker"
+                author="Juane (pilots-coder624)"
+              />
+            )}
+
+            {/* Upload Section */}
+            {activeSection === 'upload' && (
+              <div className='animate-fade-in'>
+              <TwoColumnLayout
+                leftContent={(
+                  <div className="space-y-4">
+                    {hasData && (
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        <CurrentWeekProgress
+                          currentWeekHours={currentWeekStats.hours}
+                          currentWeekEarnings={currentWeekStats.earnings}
+                          goalHoursPerWeek={timeGoalHours}
+                          daysRemainingInWeek={currentWeekStats.daysRemaining}
+                          currentWeekStart={currentWeekStats.start}
+                          currentWeekEnd={currentWeekStats.end}
+                        />
+                        <QuickInsights
+                          weeklyStats={weeklyStats}
+                          dailyBreakdown={dailyBreakdown}
+                          goalHoursPerWeek={timeGoalHours}
+                          currentWeekHours={currentWeekStats.hours}
+                          currentWeekEarnings={currentWeekStats.earnings}
+                          entries={entries}
+                        />
+                      </div>
+                    )}
+                    {hasData && (
+                      <WeeklyHeatmap dailyBreakdown={dailyBreakdown} />
+                    )}
+                  </div>
+                )}
+                rightContent={(
+                  hasData && (
+                    <div className="flex flex-col justify-between h-full space-y-4">
+                      <GlobalOverview
+                        totalEarningsAllTime={totalEarningsAllTime}
+                        totalHoursAllTime={totalStats.totalHours}
+                        totalWeeks={weeklyStats.length}
+                        avgWeeklyEarnings={totalStats.avgWeeklyEarnings}
+                        avgWeeklyHours={totalStats.avgWeeklyHours}
+                        totalEntries={entries.length}
+                        timeGoalHours={timeGoalHours}
+                        onChangeTimeGoal={onChangeTimeGoal}
+                        avgRate={avgRateInRange}
+                      />
+                      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+                        <h4 className="text-sm font-semibold text-slate-700 mb-3">Current Range ({timeRangeLabel})</h4>
+                        <MetricTiles
+                          timeRangeLabel={timeRangeLabel}
+                          weeklyAvgHours={weeklyAvgHours}
+                          weeklyAvgEarnings={weeklyAvgEarnings}
+                          avgRate={avgRate}
+                          goalHoursPerWeek={timeGoalHours}
+                          totalEarningsRange={totalEarningsInRange}
+                          totalEarningsAllTime={totalEarningsAllTime}
+                          showTotalEarnings={false}
+                          viewMode={viewMode}
+                        />
+                      </div>
+                    </div>
+                  )
+            )}
+              />
+              </div>
+            )}
+
+            {/* Charts Section */}
+            {activeSection === 'charts' && (
+              <div className="h-full overflow-y-auto custom-scrollbar animate-fade-in flex flex-col justify-center">
+                <div className="rounded-2xl p-6">
+                  <AnalyticsControls
+                    timeRange={timeRange}
+                    onChangeRange={onChangeRange}
+                    activeChart={activeChart}
+                    onChangeChart={onChangeChart}
+                    timeGoalHours={timeGoalHours}
+                    onChangeTimeGoal={onChangeTimeGoal}
+                    earningsGoalPreview={earningsGoalPreview}
+                    entriesInRange={entriesInRange}
+                  />
+                  
+                  <div className="mt-0">
+                    {activeChart === 'trends' && (
+                      <div className="h-full w-full">
+                        {renderTrendsChart()}
+                      </div>
+                    )}
+                    
+                    {activeChart === 'projects' && (
+                      <div className="h-full w-full">
+                        {renderProjectChart()}
+                      </div>
+                    )}
+                    
+                    {activeChart === 'payTypes' && (
+                      <div className="h-full w-full">
+                        {renderPayTypeChart()}
+                      </div>
+                    )}
+                    
+                    {activeChart === 'daily' && (
+                      <div className="h-full w-full">
+                        {renderDailyChart()}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 4-Week Cycles Section */}
+            {activeSection === 'cycles' && (
+              <div className='animate-fade-in'>
+              <CycleTracker
+                cycles={fourWeekCycles}
+                timeGoalHours={timeGoalHours}
+                cyclePage={cyclePage}
+                setCyclePage={setCyclePage}
+                fmtH2={fmtH2}
+              />
+              </div>
+            )}
+
+            {/* Breakdown Section */}
+            {activeSection === 'breakdown' && (
+              <div className='animate-fade-in'>
+              <BreakdownTable
+                activeBreakdown={activeBreakdown}
+                setActiveBreakdown={setActiveBreakdown}
+                weeklyStatsInRange={filteredWeeklyForTrends}
+                dailyStatsInRange={dailyBreakdown}
+                timeGoalHours={timeGoalHours}
+                page={page}
+                setPage={setPage}
+                pageSize={9}
+                setPageSize={() => {}}
+                formatDateRange={formatDateRange}
+                showRowSelector={false}
+              />
+              </div>
+            )}
+
+          </div>
+        </div>
+      )}
     </div>
   );
 };
